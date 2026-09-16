@@ -1,0 +1,2 @@
+# Preserve distribution bytes so the published SHA256 checksums remain valid.
+/dist/** -text

@@ -1,0 +1,19 @@
+# 1.1.0: configurable item folder names
+
+User request 2026-09-15: equipment can use different names (photo: 5_TERRACE, 6_SSIDE). Allow users to edit the six actual folder names separately per machine profile. Preserve old defaults until a user changes them. Never rename source folders; edited names select existing source directories and matching backup parents.
+
+Shared DTOs (root): `MachineProfile.ItemNames : string[]` (six full single folder names), `BackupRequest.ConfiguredItems : string[]` (snapshot of ALL six; Items remains selected actual folder names). Null configuration means cloned Catalog.Items for old settings/old callers; empty/wrong-count or invalid arrays fail. Catalog.Items stays immutable default template, not active mutable UI state.
+
+Root owns Models.cs, PathSafety.cs, SettingsStore.cs, docs/version/build/package.
+GUI agent owns MainForm.cs, Program.cs: edit per-profile all six names in path/settings dialog, label button "경로·항목 설정", preserve profile-specific names during saves, refresh checkbox labels, reset checks on profile/config changes. Async callbacks capture actual item name + generation before dispatch. Snapshot ConfiguredItems for both normal and smoke requests. Do not leave selected-set/all-source safety hard-coded to Catalog.Items. Keep six slots, no add/remove. Long names must be readable through tooltip/adequate width; smaller windows still usable. Extend fixture-only smoke to edit 5/6 through dialog's validation path, save/reload via sandbox SettingsStore.SaveTo/LoadFrom, display new labels and back up custom fifth/sixth items; capture settings + main preview/result screenshots. No production user settings or network probes in smoke.
+Engine agent owns BackupEngine.cs: snapshot ConfiguredItems clone in Execution constructor; validate actual selected items belong to configured list; pass ALL configuration to every safety helper call, including log safety, preflight, finalization, and GuardWrite. No global mutation of Catalog.Items. Preserve all existing copy/cancel behavior.
+Tests agent owns tests/BackupEngineTests.cs: add custom 5/6 copying + names/duplicates, per-profile persisted names and old XML migration preserving paths/name, unsafe and duplicate item names rejected, unselected configured source protection including target junction into custom 6th. Existing29 should pass. No network/user data.
+
+Root-provided new APIs on PathSafety:
+- `string ValidateItemName(string name)` validates one exact directory component (nonblank, no separator/path traversal/colon/control/device names/trailing period or space, <=255); returns exact input. Empty is INVALID here; fallback 과검제어전 applies ONLY backup name, never item folder names.
+- `string[] ValidateItemNames(IEnumerable<string> names)` => validated cloned array, null => default Catalog.Items clone, exactly6, uniqueness OrdinalIgnoreCase; throws Korean ArgumentException.
+- `ValidateRoots(source, backup, selected, IEnumerable<string> configuredItems)` new overload; legacy 3 args calls with null. Selected names validated and must belong to actual configured list. All six configurable AND legacy default source paths protected against writes.
+- `EnsureSafeWrite(path, source, IEnumerable<string> configuredItems)` new overload; legacy2 args calls null. Guards union of configured and Catalog.Items to preserve prior source protection as names evolve.
+- `CheckSource(root,item)` and `PreviewPath(backup,item,folderName)` will validate safe single component, not fixed-catalog membership. Engine establishes membership before calling them.
+
+SettingsStore Defaults initializes each profile.ItemNames to independent validated/default clone. LoadFrom fills missing old ItemNames (null) with defaults, validates present names; SaveTo validates prior to writing. Malformed configuration follows existing warning + cleared paths behavior. Root will implement these APIs immediately.
