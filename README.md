@@ -1,44 +1,48 @@
-# 딸깍 백업
+# Ddalggak Backup
 
-1호기·2호기의 여섯 모델 폴더를 선택해서 날짜와 이름이 붙은 일반 폴더로 보관하는 Windows 프로그램입니다. 명세서 v0.2를 기준으로 구현했습니다.
+**English** | [한국어](README.ko.md)
 
-## 실행
+A Windows utility for backing up selected model folders from two equipment profiles into ordinary folders named with a date and a label. It implements specification v0.2 and supports six configurable folder names per profile.
 
-1. 배포 압축을 풀고 `DdalggakBackup.exe`를 실행합니다. 개발 폴더에서는 `dist` 아래에 있습니다. `DdalggakBackup.exe.config`를 함께 보관하세요.
-2. **1호기 / 2호기**를 선택하고 **경로·항목 설정**에서 실제 원본·백업 경로와 항목 폴더 이름을 입력합니다. 공개 배포본의 최초 경로는 비어 있으며, 저장한 설정은 다음 실행부터 복원합니다.
-3. 접근 확인이 끝나면 백업할 항목을 체크합니다. 실행할 때 체크는 모두 해제되어 있습니다.
-4. 백업 이름을 입력하거나 비워 두고 생성 예정 경로를 확인합니다. 입력하지 않으면 기본 이름 `과검제어전`을 사용합니다.
-5. **선택 항목 백업**을 누릅니다. 완료 후 항목별 상태, 실제 저장 경로, 상세 결과를 확인합니다.
+The application interface is in Korean. This guide includes the Korean button and status labels so you can find them in the app.
 
-Windows 10/11과 .NET Framework 4.8 이상이 필요합니다. 별도 설치나 관리자 실행은 필요하지 않습니다. 실제 네트워크 경로에는 이 프로그램을 실행한 Windows 계정의 공유 폴더 접근 권한이 필요합니다. 프로그램은 계정 암호를 저장하거나 원본 권한을 변경하지 않습니다.
+## Getting started
 
-## 경로 설정
+1. Extract the distribution package and run `DdalggakBackup.exe`. In this repository, the executable is in [dist](dist). Keep `DdalggakBackup.exe.config` beside it.
+2. Select **1호기 / 2호기** (Equipment 1 / Equipment 2), then open **경로·항목 설정** (Path and item settings) to enter the actual source path, backup path, and item folder names. The public build starts with empty paths and restores your saved settings on subsequent launches.
+3. Wait for the access checks, then select the items to back up. All checkboxes start unchecked each time you launch the app.
+4. Enter a backup label, or leave it blank, and check the destination preview. A blank label uses `과검제어전`.
+5. Click **선택 항목 백업** (Back up selected items). When it finishes, review each item's status, actual destination, and detailed results.
 
-공개 배포본에는 실제 장비 주소와 공유 경로가 포함되어 있지 않습니다. 최초 실행 시 **경로·항목 설정**에서 직접 입력하세요. 아래는 형식 설명용 가상 경로이며 기본값이 아닙니다.
+Requires Windows 10/11 and .NET Framework 4.8 or later. No installation or administrator privileges are required. For network paths, the Windows account running the application needs access to the shares. The application does not store account passwords or change source permissions.
 
-| 호기 | 원본 예시 | 백업 예시 |
+## Path settings
+
+The public build does not include real equipment addresses or share paths. Enter your own paths in **경로·항목 설정** on first launch. The following paths are fictional examples, not defaults.
+
+| Profile | Example source | Example backup root |
 | --- | --- | --- |
-| 1호기 | `\\machine-1.example\share\source` | `\\machine-1.example\share\backup` |
-| 2호기 | `\\machine-2.example\share\source` | `\\machine-2.example\share\backup` |
+| Equipment 1 | `\\machine-1.example\share\source` | `\\machine-1.example\share\backup` |
+| Equipment 2 | `\\machine-2.example\share\source` | `\\machine-2.example\share\backup` |
 
-**경로·항목 설정**에서 호기별 경로와 여섯 항목의 실제 폴더 이름을 바꿀 수 있습니다. 없는 백업 기본 경로를 임의로 생성하거나 다른 위치로 대체하지 않습니다. 기존 백업 기본 경로 아래에 선택한 항목 폴더가 없는 경우에만 그 항목 폴더를 만듭니다.
+Each profile has its own paths and six item folder names. The backup root must already exist; the application does not create a missing root or substitute another location. It creates a missing selected item's folder only beneath an existing backup root.
 
-최초 항목 이름은 `1_LEAD`, `2_CORNER`, `3_BODY`, `4_SIDE`, `5_TERR`, `6_SHSD`입니다. 여섯 항목 각각을 설비의 실제 폴더 이름에 맞게 수정할 수 있습니다.
+The initial item names are `1_LEAD`, `2_CORNER`, `3_BODY`, `4_SIDE`, `5_TERR`, and `6_SHSD`. Each can be changed to match the corresponding folder on your equipment.
 
-## 설비마다 항목 이름이 다를 때
+## Customizing item folder names
 
-1. **경로·항목 설정**을 엽니다.
-2. 수정할 호기의 탭을 선택합니다.
-3. 예를 들어 5번을 `5_TERRACE`, 6번을 `6_SSIDE`로 바꾸고 **저장**합니다. 원본 기본 경로 안에 있는 폴더 이름을 그대로 입력하세요.
-4. 메인 화면에서 변경된 항목 이름과 접근 상태를 확인한 뒤 선택하여 백업합니다.
+1. Open **경로·항목 설정** (Path and item settings).
+2. Select the equipment profile's tab.
+3. For example, change item 5 to `5_TERRACE` and item 6 to `6_SSIDE`, then click **저장** (Save). Enter the exact folder names found under the source root.
+4. Check the updated names and access status on the main screen, then select the items and start the backup.
 
-이름은 호기별로 따로 저장하고 다음 실행에도 유지합니다. 설정한 이름으로 원본 폴더를 찾아 같은 이름의 백업 항목 폴더에 저장합니다. 예: `<백업기본경로>\5_TERRACE\260915_과검제어전\<원본 내용물>`.
+Names are saved independently for each profile and retained across launches. The application reads the configured source folders and backs them up under item folders with the same names. For example: `<backup-root>\5_TERRACE\260915_과검제어전\<source contents>`.
 
-항목에는 경로 전체가 아닌 폴더 이름 하나만 입력합니다. 빈 이름, 경로 구분자, Windows 금지 문자, 중복 이름은 저장할 수 없습니다. 1.0.x의 기존 설정 파일은 경로·마지막 백업 이름을 유지하면서 여섯 기본 항목 이름을 자동으로 적용합니다.
+Enter one folder name per item, not a full path. Empty names, path separators, Windows-invalid characters, and duplicate names cannot be saved. Settings from version 1.0.x keep their paths and last backup label while automatically receiving the six default item names.
 
-## 저장 예시
+## Backup layout
 
-2026년 9월 12일에 `1_LEAD`와 `3_BODY`를 선택하고 `과검제어전`을 입력하면 다음과 같이 저장합니다.
+Selecting `1_LEAD` and `3_BODY` with the label `과검제어전` on September 12, 2026 produces the following layout:
 
 ```text
 backup\
@@ -49,54 +53,60 @@ backup\
       EmptyFolder\
   3_BODY\
     260912_과검제어전\
-      원본 내용물...
+      source contents...
 ```
 
-같은 이름이 있으면 항목마다 `_01`, `_02` 순으로 다음 빈 번호를 사용합니다. 기존 백업을 합치거나 덮어쓰지 않습니다. 미리보기는 예상 경로이며, 다른 실행에서 같은 이름을 선점하면 실제 결과 경로의 번호가 달라질 수 있습니다.
+If a name already exists, the application uses the next available suffix, `_01`, `_02`, and so on, independently for each item. Existing backups are never merged or overwritten. The preview is an estimate: if another run claims the same name, the actual destination suffix may differ.
 
-이름을 비워 두거나 공백만 입력하면 `YYMMDD_과검제어전`으로 저장합니다. 예를 들어 같은 날 반복해서 실행하면 `260912_과검제어전`, `260912_과검제어전_01`, `260912_과검제어전_02`가 됩니다. 직접 `과검제어전`을 입력해도 같은 이름으로 처리합니다.
+An empty or whitespace-only label produces `YYMMDD_과검제어전`. Repeated runs on the same day can therefore produce `260912_과검제어전`, `260912_과검제어전_01`, and `260912_과검제어전_02`. Explicitly entering `과검제어전` uses the same naming sequence.
 
-## 상태와 원본 보호
+## Status and source protection
 
-| 상태 | 의미 |
+| Status shown in the app | Meaning |
 | --- | --- |
-| 완료 | 모든 대상의 복사와 크기 확인이 끝났고 실패·제외·수정 시각 경고가 없음 |
-| 일부 실패 | 파일 오류, 링크·정션 제외 또는 수정 시각 보존 경고가 있음 |
-| 실패 | 사전 검사에 실패했거나 공간 부족·연결 오류 등으로 계속할 수 없음 |
-| 취소 | 중단 요청을 받아 처리하지 못한 대상이 남아 있음 |
-| 미실행 | 취소 또는 중단 전에 시작하지 않은 항목 |
+| 완료 (Complete) | All copies and size checks finished with no failures, exclusions, or modification-time warnings. |
+| 일부 실패 (Partial failure) | One or more file errors, skipped links or junctions, or modification-time preservation warnings occurred. |
+| 실패 (Failed) | Preflight checks failed, or the operation could not continue because of an error such as insufficient space or a lost connection. |
+| 취소 (Cancelled) | Cancellation was requested while some work remained unfinished. |
+| 미실행 (Not started) | The item had not started when the operation was cancelled or stopped. |
 
-복사 중에는 날짜 폴더 이름 끝에 `__미완료`가 붙습니다. 해당 항목이 완전히 성공했을 때만 표식을 제거합니다. 일부 실패, 취소, 프로그램 강제 종료 시 이 표시가 남습니다. 이미 완료된 다른 항목의 백업은 유지됩니다.
+While copying, the dated folder has the suffix `__미완료` (incomplete). The suffix is removed only when that item succeeds completely. It remains after partial failure, cancellation, or an unexpected application exit. Backups of other items that already completed are preserved.
 
-원본은 읽기 전용으로 접근합니다. 숨김 파일과 빈 폴더도 대상에 포함하고 링크·정션은 따라가지 않으며 상세 결과에 제외로 기록합니다. 백업이 원본 여섯 항목 중 어느 하나의 내부로 향하면 선택 여부와 관계없이 차단합니다. 실제 경로 확인에 실패해 안전성을 확인할 수 없는 경우도 차단합니다.
+Sources are accessed read-only. Hidden files and empty folders are included. Links and junctions are not followed and are recorded as exclusions in the detailed results. A backup destination inside any of the six source item folders is blocked, even if that item is not selected. If the actual path cannot be resolved well enough to verify safety, the operation is also blocked.
 
-파일은 새 백업 폴더 안의 임시 파일에 복사한 후 크기를 확인하고 원래 이름으로 확정합니다. 복사 중 원본의 크기나 수정 시각이 달라지면 한 번 재시도합니다. 기본 확인은 파일 크기 확인이며 해시 검증은 아닙니다. 파일별 오류는 기록하고 가능한 나머지 복사를 계속합니다.
+Each file is copied to a temporary file inside the new backup folder, checked for matching size, then finalized under its original name. If the source file's size or modification time changes during copying, the application retries once. Verification checks file size, not a cryptographic hash. File errors are recorded, and other files continue copying when possible.
 
-취소 시 이미 복사한 파일은 남기고 이번 복사에서 만든 임시 파일만 제거합니다. 제거할 수 없는 임시 파일은 상세 결과에 남습니다. 원본과 과거 백업을 삭제하거나 자동 정리하지 않습니다.
+Cancellation preserves files already copied and removes only temporary files created by the current copy operation. Temporary files that cannot be removed are listed in the detailed results. The application does not delete or automatically clean up source files or previous backups.
 
-## 설정·로그
+## Settings and logs
 
-설정은 `%LOCALAPPDATA%\DdalggakBackup\settings.xml`, 실행 로그는 같은 사용자 데이터 폴더의 `logs` 아래에 저장합니다. 마지막 선택 호기, 호기별 경로·항목 폴더 이름과 입력한 백업 이름을 복원합니다. 날짜는 PC 현지 날짜를 매번 계산하고 백업 버튼을 누른 시점에 확정합니다.
+Settings are stored in `%LOCALAPPDATA%\DdalggakBackup\settings.xml`. Run logs are stored in the `logs` subfolder of the same application data directory. The application restores the last selected profile, each profile's paths and item folder names, and the last backup label. Dates use the PC's local date and are fixed for the run when the backup button is clicked.
 
-설정 파일이 손상되면 경로를 빈 상태로 표시하고 다시 설정하도록 안내합니다. 로그에는 실행 시각, 성공·실패·제외 경로, 원인과 실제 백업 폴더를 기록합니다.
+If the settings file is corrupt, the application displays empty paths and prompts you to configure them again. Logs include run times, successful, failed, and excluded paths, error reasons, and actual backup destinations.
 
-## 사용 시 알아둘 점
+## Limitations and operational notes
 
-- 여러 파일을 차례로 읽으므로 모든 파일이 정확히 같은 순간의 상태라는 보장은 없습니다. 같은 시점의 데이터가 필요하면 원본 프로그램의 기록이 멈춘 상태에서 실행하세요.
-- 준비 단계에서 파일 목록을 확정합니다. 그 후 추가한 파일은 다음 실행에서 백업합니다.
-- 호환성을 위해 임시 경로를 포함한 대상 경로 길이를 보수적으로 247자 이하로 검사합니다. 초과 시 이름이나 백업 경로를 줄이도록 안내하며 자동으로 이름을 바꾸지 않습니다.
-- 취소는 파일 복사 블록 사이와 준비 단계에서 처리합니다. Windows가 네트워크 응답을 기다리는 동안에는 취소 완료가 지연될 수 있습니다. 이때 화면은 계속 반응합니다.
-- 드라이브 공간을 확인할 수 없으면 그 사실을 표시하고 실제 복사 중 쓰기 오류를 처리합니다.
+- Files are read sequentially, so a backup is not a snapshot of every file at exactly the same instant. Pause writes in the source application if you need a consistent point-in-time file set.
+- The file list is fixed during preparation. Files added afterward are included in the next run.
+- For compatibility, destination paths, including temporary paths, are conservatively limited to 247 characters. If a path is too long, the application asks you to shorten the label or backup path; it does not rename them automatically.
+- Cancellation is checked between file-copy blocks and during preparation. Windows network waits may delay cancellation, while the interface remains responsive.
+- If free space cannot be determined, the application reports this and handles any write errors encountered during copying.
 
-## 개발·검증
+## Building and validation
 
-Windows에 포함된 C# 컴파일러를 사용하며 NuGet이나 .NET SDK 다운로드가 필요하지 않습니다.
+The project uses the C# compiler included with Windows. No NuGet packages or .NET SDK download are required.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 ```
 
-자동 테스트는 프로젝트의 `tests\work` 아래에 테스트 원본·백업·로그를 만들며 실제 장비의 공유 폴더를 사용하지 않습니다. 상세 검증 결과는 `검증결과.md`(개발 폴더에서는 `docs` 아래)를 참고하세요.
+Automated tests create their sources, backups, and logs under `tests\work` inside the project. They do not use live equipment shares. See the [validation report (Korean)](docs/검증결과.md) for detailed results. The distribution also includes `검증결과.md`.
 
-소스 구성: `src\MainForm.cs` (화면), `src\BackupEngine.cs` (백업), `src\PathSafety.cs` (경로 보호), `src\SettingsStore.cs` (설정), `tests\BackupEngineTests.cs` (회귀 테스트).
+Main source files:
+
+- [MainForm.cs](src/MainForm.cs): user interface
+- [BackupEngine.cs](src/BackupEngine.cs): backup operations
+- [PathSafety.cs](src/PathSafety.cs): path protection
+- [SettingsStore.cs](src/SettingsStore.cs): settings persistence
+- [BackupEngineTests.cs](tests/BackupEngineTests.cs): regression tests

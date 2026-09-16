@@ -14,8 +14,8 @@ $options = @('/nologo', '/target:winexe', '/platform:anycpu', '/optimize+', '/wa
 & $compiler @options @sourceFiles
 if ($LASTEXITCODE -ne 0) { throw 'GUI build failed.' }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination ($exe + '.config') -Force
-if (Test-Path -LiteralPath (Join-Path $projectRoot 'README.md')) {
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination (Join-Path $distPath '사용안내.md') -Force
+if (Test-Path -LiteralPath (Join-Path $projectRoot 'README.ko.md')) {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'README.ko.md') -Destination (Join-Path $distPath '사용안내.md') -Force
 }
 Write-Output ('Built: ' + $exe)
 if ($Test) {
