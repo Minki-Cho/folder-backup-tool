@@ -1,0 +1,7 @@
+tests/work/
+tests/*.exe
+tests/*.exe.config
+tests/*.dll
+tests/*.pdb
+dist/*.zip
+*.tmp
