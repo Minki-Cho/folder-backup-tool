@@ -36,7 +36,7 @@ namespace DdalggakBackup
         }
 
         // Explicit local fixture only. This route does not load or save real settings,
-        // executes its explicit test backup and logs only under the supplied fixture,
+        // executes its explicit test backup and isolated overwrite fixture only beneath that fixture,
         // and cannot probe the deployed UNC defaults.
         private static int SmokeTest(string fixtureRoot)
         {

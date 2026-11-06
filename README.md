@@ -2,7 +2,7 @@
 
 **English** | [한국어](README.ko.md)
 
-A Windows utility for backing up selected model folders from two equipment profiles into ordinary folders named with a date and a label. It implements specification v0.2 and supports six configurable folder names per profile.
+A Windows utility for backing up model folders from two equipment profiles into ordinary folders named with a date and a label. Each profile has six configurable folder names. Version 1.2.0 also lets you drag in files or folders and apply them to one item after backing up that entire item.
 
 The application interface is in Korean. This guide includes the Korean button and status labels so you can find them in the app.
 
@@ -40,6 +40,21 @@ Names are saved independently for each profile and retained across launches. The
 
 Enter one folder name per item, not a full path. Empty names, path separators, Windows-invalid characters, and duplicate names cannot be saved. Settings from version 1.0.x keep their paths and last backup label while automatically receiving the six default item names.
 
+## Back up and apply (overwrite)
+
+1. Switch to **백업 후 적용** (Back up and apply) mode.
+2. Select one target item. Checking another item clears the previous selection; applying to multiple items at once is disabled.
+3. Drop the files or folders you want to apply into the input area. Individual files go directly into the selected item. A dropped folder contributes **its contents**, without the dropped folder's own name. For example, dropping a `Config` folder containing `camera.ini` onto item `1_LEAD` produces `1_LEAD\camera.ini`. Internal subdirectories are preserved.
+4. Review the backup label and target, then click **선택 항목 적용** (Apply to selected item).
+5. After confirmation, the application backs up the entire selected item. Only a completely successful backup allows application to begin. Matching files are replaced, missing files and subdirectories are added, and existing files absent from the dropped data are retained.
+6. Review the pre-apply backup and application results separately. The pre-apply backup contains the original data if you need to recover it.
+
+**Pause writes in the equipment software before applying.** Backup and application do not lock the entire folder as a single transaction. If an overwrite candidate is found to have changed after backup, application is blocked.
+
+Any backup error, partial failure, excluded link, warning, or cancellation blocks application. An application error or cancellation stops subsequent files; files already applied remain changed. There is no automatic rollback of the entire operation. A successful pre-apply backup does not by itself mean application succeeded.
+
+Conflicting input destinations, file/directory collisions, inputs overlapping the target, links and junctions, and overlong paths are rejected. Existing files are replaced only after a temporary replacement file is prepared and verified. If replacement fails, the application never falls back to deleting the existing file first.
+
 ## Backup layout
 
 Selecting `1_LEAD` and `3_BODY` with the label `과검제어전` on September 12, 2026 produces the following layout:
@@ -72,7 +87,7 @@ An empty or whitespace-only label produces `YYMMDD_과검제어전`. Repeated ru
 
 While copying, the dated folder has the suffix `__미완료` (incomplete). The suffix is removed only when that item succeeds completely. It remains after partial failure, cancellation, or an unexpected application exit. Backups of other items that already completed are preserved.
 
-Sources are accessed read-only. Hidden files and empty folders are included. Links and junctions are not followed and are recorded as exclusions in the detailed results. A backup destination inside any of the six source item folders is blocked, even if that item is not selected. If the actual path cannot be resolved well enough to verify safety, the operation is also blocked.
+Backup operations access sources read-only. Hidden files and empty folders are included. Links and junctions are not followed and are recorded as exclusions in the detailed results. A backup destination inside any of the six source item folders is blocked, even if that item is not selected. If the actual path cannot be resolved well enough to verify safety, the operation is also blocked. In **Back up and apply** mode, a successful backup is followed by writes to the one item you explicitly selected.
 
 Each file is copied to a temporary file inside the new backup folder, checked for matching size, then finalized under its original name. If the source file's size or modification time changes during copying, the application retries once. Verification checks file size, not a cryptographic hash. File errors are recorded, and other files continue copying when possible.
 
@@ -107,6 +122,8 @@ Main source files:
 
 - [MainForm.cs](src/MainForm.cs): user interface
 - [BackupEngine.cs](src/BackupEngine.cs): backup operations
+- [ApplyEngine.cs](src/ApplyEngine.cs): staging, pre-apply backup, and guarded file replacement
 - [PathSafety.cs](src/PathSafety.cs): path protection
 - [SettingsStore.cs](src/SettingsStore.cs): settings persistence
 - [BackupEngineTests.cs](tests/BackupEngineTests.cs): regression tests
+- [ApplyEngineTests.cs](tests/ApplyEngineTests.cs): backup-before-apply safety tests

@@ -19,12 +19,14 @@ if (Test-Path -LiteralPath (Join-Path $projectRoot 'README.ko.md')) {
 }
 Write-Output ('Built: ' + $exe)
 if ($Test) {
-    $testExe = Join-Path $projectRoot 'tests\BackupEngineTests.exe'
     $coreFiles = @($sourceFiles | Where-Object { [IO.Path]::GetFileName($_) -notin @('MainForm.cs', 'Program.cs') })
-    $testOptions = @('/nologo', '/target:exe', '/platform:anycpu', '/optimize+', '/warn:4', '/codepage:65001', '/langversion:5', ('/out:' + $testExe), '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Xml.dll', '/reference:System.Web.Extensions.dll')
-    & $compiler @testOptions @coreFiles (Join-Path $projectRoot 'tests\BackupEngineTests.cs')
-    if ($LASTEXITCODE -ne 0) { throw 'Tests build failed.' }
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination ($testExe + '.config') -Force
-    & $testExe
-    if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+    foreach ($testName in @('BackupEngineTests', 'ApplyEngineTests')) {
+        $testExe = Join-Path $projectRoot ('tests\' + $testName + '.exe')
+        $testOptions = @('/nologo', '/target:exe', '/platform:anycpu', '/optimize+', '/warn:4', '/codepage:65001', '/langversion:5', ('/out:' + $testExe), '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Xml.dll', '/reference:System.Web.Extensions.dll')
+        & $compiler @testOptions @coreFiles (Join-Path $projectRoot ('tests\' + $testName + '.cs'))
+        if ($LASTEXITCODE -ne 0) { throw ($testName + ' build failed.') }
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination ($testExe + '.config') -Force
+        & $testExe
+        if ($LASTEXITCODE -ne 0) { throw ($testName + ' failed.') }
+    }
 }

@@ -1,5 +1,7 @@
 # Implementation contract
 
+For the separately authorized backup-before-apply workflow in 1.2.0, see [apply-contract.md](apply-contract.md). The read-only source rules below continue to describe `BackupEngine`; `ApplyEngine` performs the new, explicitly selected target writes after successful backup.
+
 For editable per-equipment folder names introduced in 1.1.0, see [item-names-contract.md](item-names-contract.md). Its ConfiguredItems overloads and dynamic GUI names extend the initial contract below.
 
 Windows Forms / C# 5 / .NET Framework 4.8. No NuGet or SDK needed; build with Windows Framework64 v4.0.30319 csc.exe. Namespace DdalggakBackup. Shared DTOs: src/Models.cs. Source files UTF-8.

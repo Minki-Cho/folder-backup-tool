@@ -22,9 +22,14 @@ namespace DdalggakBackup
         private AppSettings _settings;
         private readonly bool _persistSettings;
         private string _settingsWarning;
-        private ComboBox _profile;
+        private ComboBox _profile, _mode;
         private TextBox _source, _backup, _name, _preview, _detailText;
-        private GroupBox _pathGroup, _itemGroup, _nameGroup;
+        private GroupBox _pathGroup, _itemGroup, _nameGroup, _dropGroup;
+        private Panel _scrollHost;
+        private TableLayoutPanel _rootLayout;
+        private ListBox _dropList;
+        private Label _dropHint, _modeLabel;
+        private Button _selectAll;
         private Label _date, _folderName, _nameError, _selectionCount, _state, _counts, _currentFile, _notice;
         private Button _start, _cancel, _openFolder, _openLog;
         private CheckBox[] _checks;
@@ -41,13 +46,17 @@ namespace DdalggakBackup
         private readonly System.Windows.Forms.Timer _progressTimer = new System.Windows.Forms.Timer();
         private readonly object _progressLock = new object();
         private BackupProgress _latestProgress;
+        private ApplyPhase? _latestApplyPhase;
         private CancellationTokenSource _cancellation;
         private BackupResult _lastResult;
+        private ApplyResult _lastApplyResult;
+        private bool _runningApply;
         private bool _busy, _closeRequested, _loading;
         private int _sourceGeneration, _previewGeneration;
         private DateTime _displayDay;
         private string _validName;
         public Task Initialization { get; private set; }
+        private bool ApplyMode { get { return _mode != null && _mode.SelectedIndex == 1; } }
 
         public MainForm() : this(LoadSettings(), true, null) { }
 
@@ -68,7 +77,7 @@ namespace DdalggakBackup
             _loadWarning = null;
             Initialization = Task.FromResult(0);
             _loading = true;
-            Text = "딸깍 백업";
+            Text = "딸깍 백업 · 적용";
             AutoScaleMode = AutoScaleMode.Dpi;
             Font = new Font("맑은 고딕", 9F, FontStyle.Regular, GraphicsUnit.Point);
             ForeColor = Ink;
@@ -84,6 +93,7 @@ namespace DdalggakBackup
             _name.Text = _settings.LastName ?? "";
             ShowProfile();
             _loading = false;
+            UpdateModeLayout();
             UpdateNameAndSelection();
 
             _previewTimer.Interval = 280;
@@ -123,41 +133,55 @@ namespace DdalggakBackup
         private void BuildLayout()
         {
             Panel scrollHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+            _scrollHost = scrollHost;
             Controls.Add(scrollHost);
             TableLayoutPanel root = new TableLayoutPanel();
+            _rootLayout = root;
             root.Location = Point.Empty;
             root.Size = new Size(ClientSize.Width, Math.Max(710, ClientSize.Height - 105));
             root.Padding = new Padding(22, 16, 22, 0);
             root.ColumnCount = 1;
-            root.RowCount = 5;
+            root.RowCount = 6;
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 176));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 119));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             scrollHost.Controls.Add(root);
             scrollHost.Resize += delegate
             {
-                root.Size = new Size(Math.Max(980, scrollHost.ClientSize.Width - (scrollHost.ClientSize.Height < 710 ? SystemInformation.VerticalScrollBarWidth : 0)), Math.Max(710, scrollHost.ClientSize.Height));
+                ResizeContent();
             };
 
             Panel heading = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
-            Label title = MakeLabel("딸깍 백업", 23, Ink);
+            Label title = MakeLabel("딸깍 백업 · 적용", 23, Ink);
             title.Dock = DockStyle.None;
             title.Location = new Point(0, 0);
             title.Size = new Size(330, 37);
             title.Font = new Font(Font.FontFamily, 23, FontStyle.Bold);
             heading.Controls.Add(title);
-            Label subtitle = MakeLabel("선택한 항목을 오늘 날짜의 새 폴더로 보관합니다.", 9, Muted);
+            Label subtitle = MakeLabel("선택 항목 백업 또는 한 항목의 사전 백업 후 파일 적용", 9, Muted);
             subtitle.Dock = DockStyle.None;
             subtitle.Location = new Point(2, 40);
-            subtitle.Size = new Size(700, 22);
+            subtitle.Size = new Size(670, 22);
             heading.Controls.Add(subtitle);
-            Label badge = MakeLabel("수동 전체 백업", 9, Accent);
-            badge.TextAlign = ContentAlignment.MiddleRight;
-            badge.Dock = DockStyle.Right;
-            badge.Width = 160;
-            heading.Controls.Add(badge);
+            FlowLayoutPanel modePanel = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 272, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+            _modeLabel = MakeLabel("작업 방식 · 백업", 8.5F, Muted);
+            _modeLabel.AutoSize = true;
+            _mode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 258, AccessibleName = "작업 방식" };
+            _mode.Items.AddRange(new object[] { "백업", "백업 후 적용 (항목 1개)" });
+            _mode.SelectedIndex = 0;
+            _mode.SelectedIndexChanged += delegate
+            {
+                if (_loading || _busy) return;
+                ChangeAllChecks(false);
+                UpdateModeLayout();
+                UpdateNameAndSelection();
+            };
+            modePanel.Controls.Add(_modeLabel);
+            modePanel.Controls.Add(_mode);
+            heading.Controls.Add(modePanel);
             root.Controls.Add(heading, 0, 0);
 
             _pathGroup = MakeGroup("01   장비와 기본 경로");
@@ -232,7 +256,7 @@ namespace DdalggakBackup
                 item.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
                 item.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
                 CheckBox check = new CheckBox { Text = "", Dock = DockStyle.Fill, Enabled = false, AutoSize = false, AutoEllipsis = true, Checked = false };
-                check.CheckedChanged += delegate { if (!_loading) UpdateNameAndSelection(); };
+                check.CheckedChanged += delegate(object sender, EventArgs e) { OnItemSelectionChanged((CheckBox)sender); };
                 Label status = MakeLabel("확인 대기", 8.5F, Muted);
                 status.AutoEllipsis = true;
                 _checks[i] = check;
@@ -243,6 +267,7 @@ namespace DdalggakBackup
             }
             FlowLayoutPanel selectionButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
             Button selectAll = MakeButton("전체 선택", 91);
+            _selectAll = selectAll;
             selectAll.Height = 29;
             selectAll.Click += delegate { ChangeAllChecks(true); };
             Button clearAll = MakeButton("전체 해제", 91);
@@ -284,12 +309,56 @@ namespace DdalggakBackup
             configure.Controls.Add(_nameGroup, 1, 0);
             root.Controls.Add(configure, 0, 2);
 
+            _dropGroup = MakeGroup("04   적용할 파일·폴더 · 여기에 끌어다 놓으세요");
+            TableLayoutPanel dropPanel = NewTable(2, 2);
+            dropPanel.Padding = new Padding(12, 3, 12, 6);
+            dropPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            dropPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
+            dropPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            dropPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
+            _dropList = new ListBox { Dock = DockStyle.Fill, HorizontalScrollbar = true, IntegralHeight = false, AccessibleName = "적용할 파일과 폴더 목록" };
+            FlowLayoutPanel dropButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+            Button addFiles = MakeButton("파일 추가", 114);
+            addFiles.Height = 26;
+            addFiles.Click += delegate
+            {
+                using (OpenFileDialog dialog = new OpenFileDialog { Multiselect = true, CheckFileExists = true, Title = "적용할 파일 선택" })
+                    if (dialog.ShowDialog(this) == DialogResult.OK) AddDropInputs(dialog.FileNames);
+            };
+            Button addFolder = MakeButton("폴더 추가", 114);
+            addFolder.Height = 26;
+            addFolder.Click += delegate
+            {
+                using (FolderBrowserDialog dialog = new FolderBrowserDialog { Description = "이 폴더 안의 내용물을 선택 항목에 적용합니다.", ShowNewFolderButton = false })
+                    if (dialog.ShowDialog(this) == DialogResult.OK) AddDropInputs(new[] { dialog.SelectedPath });
+            };
+            Button clearInputs = MakeButton("입력 비우기", 114);
+            clearInputs.Height = 26;
+            clearInputs.Click += delegate { if (!_busy) { _dropList.Items.Clear(); UpdateNameAndSelection(); } };
+            dropButtons.Controls.Add(addFiles);
+            dropButtons.Controls.Add(addFolder);
+            dropButtons.Controls.Add(clearInputs);
+            _dropHint = MakeLabel("폴더는 내용물만, 파일은 그대로 적용 대상 바로 아래에 넣습니다.", 8.5F, Muted);
+            _dropHint.AutoEllipsis = true;
+            dropPanel.Controls.Add(_dropList, 0, 0);
+            dropPanel.Controls.Add(dropButtons, 1, 0);
+            dropPanel.Controls.Add(_dropHint, 0, 1);
+            dropPanel.SetColumnSpan(_dropHint, 2);
+            _dropGroup.Controls.Add(dropPanel);
+            foreach (Control dropTarget in new Control[] { _dropGroup, dropPanel, _dropList, _dropHint })
+            {
+                dropTarget.AllowDrop = true;
+                dropTarget.DragEnter += DropInputsEnter;
+                dropTarget.DragDrop += DropInputs;
+            }
+            root.Controls.Add(_dropGroup, 0, 3);
+
             GroupBox previewGroup = MakeGroup("생성 예정 경로 · 중복 번호는 항목별로 적용되며 실행 시 최종 확정됩니다");
             _preview = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, WordWrap = false, ScrollBars = ScrollBars.Both, BorderStyle = BorderStyle.None, BackColor = Color.White, ForeColor = Muted, Margin = Padding.Empty };
             Panel previewPadding = new Panel { Dock = DockStyle.Fill, Padding = new Padding(13, 5, 9, 6) };
             previewPadding.Controls.Add(_preview);
             previewGroup.Controls.Add(previewPadding);
-            root.Controls.Add(previewGroup, 0, 3);
+            root.Controls.Add(previewGroup, 0, 4);
 
             TableLayoutPanel output = NewTable(1, 2);
             output.Margin = new Padding(0, 2, 0, 0);
@@ -367,7 +436,7 @@ namespace DdalggakBackup
             _tabs.TabPages.Add(resultsTab);
             _tabs.TabPages.Add(detailTab);
             output.Controls.Add(_tabs, 0, 1);
-            root.Controls.Add(output, 0, 4);
+            root.Controls.Add(output, 0, 5);
 
             TableLayoutPanel footer = NewTable(2, 2);
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -435,6 +504,88 @@ namespace DdalggakBackup
             DataGridViewTextBoxColumn c = new DataGridViewTextBoxColumn { HeaderText = title, Width = width, SortMode = DataGridViewColumnSortMode.NotSortable };
             if (fill) { c.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; c.MinimumWidth = 180; }
             _results.Columns.Add(c);
+        }
+
+        private void ResizeContent()
+        {
+            if (_scrollHost == null || _rootLayout == null) return;
+            int minimum = ApplyMode ? 866 : 710;
+            _rootLayout.Size = new Size(Math.Max(980, _scrollHost.ClientSize.Width -
+                (_scrollHost.ClientSize.Height < minimum ? SystemInformation.VerticalScrollBarWidth : 0)),
+                Math.Max(minimum, _scrollHost.ClientSize.Height));
+        }
+
+        private void UpdateModeLayout()
+        {
+            if (_dropGroup == null) return;
+            _modeLabel.Text = ApplyMode ? "작업 방식 · 백업 후 적용" : "작업 방식 · 백업";
+            _dropGroup.Visible = ApplyMode;
+            _rootLayout.RowStyles[3].Height = ApplyMode ? 156 : 0;
+            _itemGroup.Text = ApplyMode ? "02   적용할 항목 · 1개만 선택" : "02   백업할 항목";
+            _nameGroup.Text = ApplyMode ? "03   적용 전 백업 이름" : "03   백업 이름";
+            _selectAll.Visible = !ApplyMode;
+            _start.Text = ApplyMode ? "선택 항목 적용" : "선택 항목 백업";
+            _notice.Text = ApplyMode
+                ? "선택한 항목을 먼저 완전히 백업한 뒤 적용합니다. 같은 이름의 파일만 덮어쓰며 다른 기존 파일은 유지합니다."
+                : "실행마다 새 폴더에 전체 복사합니다. 같은 시점의 파일 세트가 필요하면 원본 기록을 멈춘 뒤 실행하세요.";
+            _tips.SetToolTip(_notice, _notice.Text);
+            ResizeContent();
+            _scrollHost.AutoScrollPosition = Point.Empty;
+        }
+
+        private void OnItemSelectionChanged(CheckBox changed)
+        {
+            if (_loading) return;
+            if (ApplyMode && changed.Checked)
+            {
+                _loading = true;
+                try { foreach (CheckBox check in _checks) if (check != changed) check.Checked = false; }
+                finally { _loading = false; }
+            }
+            UpdateNameAndSelection();
+        }
+
+        private void DropInputsEnter(object sender, DragEventArgs e)
+        {
+            e.Effect = !_busy && ApplyMode && e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop) &&
+                (e.AllowedEffect & DragDropEffects.Copy) != 0 ? DragDropEffects.Copy : DragDropEffects.None;
+        }
+
+        private void DropInputs(object sender, DragEventArgs e)
+        {
+            if (_busy || !ApplyMode || e.Data == null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            string[] paths = e.Data.GetData(DataFormats.FileDrop) as string[];
+            if (paths != null) AddDropInputs(paths);
+        }
+
+        private void AddDropInputs(string[] paths)
+        {
+            if (_busy || !ApplyMode) return;
+            try
+            {
+                List<string> normalized = new List<string>();
+                foreach (string path in paths)
+                {
+                    if (String.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path))
+                        throw new ArgumentException("파일·폴더의 전체 경로가 필요합니다.");
+                    normalized.Add(Path.GetFullPath(path));
+                }
+                foreach (string path in normalized)
+                    if (!_dropList.Items.Cast<string>().Contains(path, StringComparer.OrdinalIgnoreCase)) _dropList.Items.Add(path);
+                UpdateNameAndSelection();
+            }
+            catch (Exception error)
+            {
+                _dropHint.Text = "입력할 수 없는 경로: " + error.Message;
+                _tips.SetToolTip(_dropHint, _dropHint.Text);
+            }
+        }
+
+        private bool CanStart()
+        {
+            int selected = SelectedItems().Length;
+            return !_busy && _validName != null && _profile.SelectedIndex >= 0 &&
+                (ApplyMode ? selected == 1 && _dropList.Items.Count > 0 : selected > 0);
         }
 
         private void ShowProfile()
@@ -507,6 +658,7 @@ namespace DdalggakBackup
 
         private void ChangeAllChecks(bool value)
         {
+            if (ApplyMode && value) return;
             _loading = true;
             for (int i = 0; i < _checks.Length; i++) _checks[i].Checked = value && _available[i];
             _loading = false;
@@ -544,11 +696,13 @@ namespace DdalggakBackup
             _tips.SetToolTip(_nameError, _nameError.Text);
             _tips.SetToolTip(_folderName, _folderName.Text);
             int selected = SelectedItems().Length;
-            _selectionCount.Text = selected + "개 선택";
-            _start.Enabled = _validName != null && selected > 0 && _profile.SelectedIndex >= 0;
+            _selectionCount.Text = selected + (ApplyMode ? " / 1개 선택" : "개 선택");
+            _start.Enabled = CanStart();
+            _dropHint.Text = "입력 " + _dropList.Items.Count + "개 · 폴더는 내용물만, 파일은 그대로 대상 바로 아래에 넣습니다.";
+            _tips.SetToolTip(_dropHint, _dropHint.Text);
             _previewGeneration++;
             _previewTimer.Stop();
-            if (selected == 0) _preview.Text = "백업할 항목을 선택하면 항목별 저장 경로가 표시됩니다.";
+            if (selected == 0) _preview.Text = ApplyMode ? "적용할 항목을 1개 선택하세요. 선택한 항목을 먼저 백업합니다." : "백업할 항목을 선택하면 항목별 저장 경로가 표시됩니다.";
             else if (_validName == null) _preview.Text = "유효한 백업 이름을 입력하면 저장 경로가 표시됩니다.";
             else
             {
@@ -563,6 +717,9 @@ namespace DdalggakBackup
             int generation = _previewGeneration;
             string[] selected = SelectedItems();
             string backupRoot = _backup.Text;
+            string sourceRoot = _source.Text;
+            bool apply = ApplyMode;
+            string[] inputs = _dropList.Items.Cast<string>().ToArray();
             string folderName = PathSafety.FolderName(_validName, DateTime.Now);
             string text;
             try
@@ -571,7 +728,16 @@ namespace DdalggakBackup
                 {
                     List<string> paths = new List<string>();
                     foreach (string item in selected)
-                        paths.Add(PathSafety.PreviewPath(backupRoot, item, folderName));
+                    {
+                        string backupPath = PathSafety.PreviewPath(backupRoot, item, folderName);
+                        if (!apply) paths.Add(backupPath);
+                        else
+                        {
+                            paths.Add("① 사전 백업: " + backupPath);
+                            paths.Add("② 적용 대상: " + Path.Combine(sourceRoot, item));
+                            paths.Add(inputs.Length == 0 ? "적용할 파일·폴더를 끌어다 놓으세요." : "입력 " + inputs.Length + "개 · 폴더 내용물은 대상 바로 아래로, 같은 파일명은 덮어쓰기");
+                        }
+                    }
                     return String.Join(Environment.NewLine, paths);
                 });
             }
@@ -623,6 +789,7 @@ namespace DdalggakBackup
 
         private async void StartBackup(object sender, EventArgs e)
         {
+            if (ApplyMode) { await StartApplyAsync(); return; }
             DateTime startedAt = DateTime.Now;
             if (_busy) return;
             string[] selected = SelectedItems();
@@ -644,6 +811,8 @@ namespace DdalggakBackup
             SaveSettings(false);
             _cancellation = new CancellationTokenSource();
             _lastResult = null;
+            _lastApplyResult = null;
+            _runningApply = false;
             _results.Rows.Clear();
             foreach (string item in selected) _results.Rows.Add(item, "미실행", "0", "0", "0", "0", "—");
             _details.Items.Clear();
@@ -693,23 +862,142 @@ namespace DdalggakBackup
             _tips.SetToolTip(_folderName, _folderName.Text);
         }
 
-        private void CaptureProgress(BackupProgress progress)
+        private async Task StartApplyAsync()
         {
-            if (progress == null) return;
-            BackupProgress snapshot = new BackupProgress
+            if (!CanStart() || !ApplyMode) return;
+            string[] selected = SelectedItems();
+            if (selected.Length != 1) return;
+            ApplyRequest request;
+            try
+            {
+                request = new ApplyRequest
+                {
+                    SourceRoot = _source.Text, BackupRoot = _backup.Text,
+                    Name = PathSafety.ValidateName(_name.Text), Item = selected[0],
+                    ConfiguredItems = (string[])_activeItems.Clone(),
+                    InputPaths = _dropList.Items.Cast<string>().ToArray(), StartedAt = DateTime.Now
+                };
+                string target = Path.Combine(PathSafety.Normalize(request.SourceRoot), request.Item);
+                string message = "적용 대상: " + target + "\r\n\r\n" +
+                    "입력 파일·폴더: " + request.InputPaths.Length + "개\r\n" +
+                    "선택한 항목 전체를 먼저 백업합니다. 백업이 완전히 성공해야 적용을 시작합니다.\r\n" +
+                    "드래그한 폴더는 내용물만 대상 바로 아래에 넣고, 파일은 그대로 넣습니다.\r\n" +
+                    "같은 이름의 파일을 덮어쓰며 나머지 기존 파일은 유지합니다.\r\n" +
+                    "적용 중 실패·취소되면 이미 적용된 파일은 남으며 사전 백업은 보존됩니다.\r\n\r\n" +
+                    "대상 프로그램의 파일 기록을 멈춘 상태에서 진행하세요. 적용하시겠습니까?";
+                if (MessageBox.Show(this, message, "사전 백업 후 적용", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            }
+            catch (Exception error)
+            {
+                _nameError.Text = error.Message;
+                _nameError.ForeColor = Bad;
+                return;
+            }
+            SaveSettings(false);
+            await ExecuteApplyAsync(request);
+        }
+
+        // Shared execution path. Interactive use always enters through StartApplyAsync's confirmation;
+        // the local fixture smoke route calls this only with its own sandbox paths and logs.
+        private async Task ExecuteApplyAsync(ApplyRequest request)
+        {
+            if (_busy) return;
+            _runningApply = true;
+            _lastResult = null;
+            _lastApplyResult = null;
+            _cancellation = new CancellationTokenSource();
+            lock (_progressLock) { _latestProgress = null; _latestApplyPhase = null; }
+            _results.Rows.Clear();
+            _results.Rows.Add(request.Item + " · 사전 백업", "미실행", "0", "0", "0", "0", "—");
+            _results.Rows.Add(request.Item + " · 적용", "미실행", "0", "0", "0", "0", "—");
+            _details.Items.Clear();
+            _detailText.Text = "사전 백업과 적용의 상태·경로를 각각 확인할 수 있습니다.";
+            _tabs.TabPages[1].Text = "상세 기록";
+            _tabs.SelectedIndex = 0;
+            _state.Text = "적용 준비 중";
+            _state.ForeColor = Accent;
+            _counts.Text = "입력 파일·폴더를 확인합니다. 사전 백업 완료 후에만 적용합니다.";
+            _currentFile.Text = "적용 대상  " + Path.Combine(request.SourceRoot, request.Item);
+            _progress.Style = ProgressBarStyle.Marquee;
+            _progress.MarqueeAnimationSpeed = 28;
+            SetBusy(true);
+            _progressTimer.Start();
+            ApplyResult result;
+            try
+            {
+                CancellationToken token = _cancellation.Token;
+                result = await Task.Run(delegate { return new ApplyEngine().Run(request, CaptureApplyProgress, token); });
+            }
+            catch (Exception error)
+            {
+                result = new ApplyResult
+                {
+                    State = BackupState.Failed, StartedAt = request.StartedAt, FinishedAt = DateTime.Now,
+                    TargetPath = Path.Combine(request.SourceRoot, request.Item),
+                    Message = "예기치 않은 오류로 적용 작업이 중단되었습니다. 실제 대상과 백업·로그를 확인하세요. " + error.Message,
+                    Application = new ItemResult { Item = request.Item, State = BackupState.Failed }
+                };
+                result.Application.Details.Add(new DetailEntry { Time = DateTime.Now, Item = request.Item, Kind = "failure", Message = error.ToString() });
+            }
+            finally
+            {
+                _progressTimer.Stop();
+                DrainProgress();
+                _cancellation.Dispose();
+                _cancellation = null;
+            }
+            _lastApplyResult = result;
+            ShowApplyResult(result, request.Item);
+            _runningApply = false;
+            SetBusy(false);
+            _scrollHost.ScrollControlIntoView(_results);
+            if (_closeRequested) { Close(); return; }
+            _displayDay = DateTime.Now.Date;
+            _date.Text = "오늘 날짜  " + _displayDay.ToString("yyyy-MM-dd") + "  ·  PC 현지 시간";
+            _folderName.Text = PathSafety.FolderName(request.Name, _displayDay);
+        }
+
+        private void CaptureApplyProgress(ApplyProgress value)
+        {
+            if (value == null || value.Progress == null) return;
+            lock (_progressLock)
+            {
+                _latestProgress = CopyProgress(value.Progress);
+                _latestApplyPhase = value.Phase;
+            }
+        }
+
+        private static BackupProgress CopyProgress(BackupProgress progress)
+        {
+            return new BackupProgress
             {
                 State = progress.State, Item = progress.Item, CurrentFile = progress.CurrentFile,
                 Message = progress.Message, TotalFiles = progress.TotalFiles, ProcessedFiles = progress.ProcessedFiles,
                 SucceededFiles = progress.SucceededFiles, FailedFiles = progress.FailedFiles
             };
-            lock (_progressLock) { _latestProgress = snapshot; }
+        }
+
+        private static string ApplyPhaseText(ApplyPhase phase)
+        {
+            if (phase == ApplyPhase.BackingUp) return "사전 백업 중";
+            if (phase == ApplyPhase.Applying) return "적용 중";
+            return "적용 준비 중";
+        }
+
+        private void CaptureProgress(BackupProgress progress)
+        {
+            if (progress == null) return;
+            lock (_progressLock) { _latestProgress = CopyProgress(progress); _latestApplyPhase = null; }
         }
         private void DrainProgress()
         {
             BackupProgress p;
-            lock (_progressLock) { p = _latestProgress; _latestProgress = null; }
+            ApplyPhase? phase;
+            lock (_progressLock) { p = _latestProgress; phase = _latestApplyPhase; _latestProgress = null; _latestApplyPhase = null; }
             if (p == null) return;
-            _state.Text = _cancellation != null && _cancellation.IsCancellationRequested ? "취소 중" : StateText(p.State);
+            _state.Text = _cancellation != null && _cancellation.IsCancellationRequested ? "취소 중" :
+                (phase.HasValue ? ApplyPhaseText(phase.Value) : StateText(p.State));
             _counts.Text = String.Format("전체 {0:N0}개   ·   처리 {1:N0}개   ·   성공 {2:N0}개   ·   실패 {3:N0}개", p.TotalFiles, p.ProcessedFiles, p.SucceededFiles, p.FailedFiles);
             _currentFile.Text = String.IsNullOrEmpty(p.CurrentFile) ? (p.Message ?? "") : (p.Item ?? "") + "  ·  " + p.CurrentFile;
             _tips.SetToolTip(_currentFile, _currentFile.Text + Environment.NewLine + (p.Message ?? ""));
@@ -725,9 +1013,11 @@ namespace DdalggakBackup
             }
             foreach (DataGridViewRow row in _results.Rows)
             {
-                if ((string)row.Cells[0].Value == p.Item)
+                if ((!_runningApply && (string)row.Cells[0].Value == p.Item) ||
+                    (_runningApply && phase.HasValue &&
+                    ((phase.Value == ApplyPhase.BackingUp && row.Index == 0) || (phase.Value == ApplyPhase.Applying && row.Index == 1))))
                 {
-                    row.Cells[1].Value = StateText(p.State);
+                    row.Cells[1].Value = phase.HasValue ? ApplyPhaseText(phase.Value) : StateText(p.State);
                     row.Cells[1].Style.ForeColor = Accent;
                 }
             }
@@ -735,6 +1025,9 @@ namespace DdalggakBackup
 
         private void ShowResult(BackupResult result)
         {
+            _openFolder.Text = "선택 결과 폴더 열기";
+            _results.Columns[0].Width = 105;
+            _results.Columns[6].HeaderText = "실제 저장 경로";
             _progress.Style = ProgressBarStyle.Continuous;
             int total = result.Items.Sum(item => item.TotalFiles);
             int processed = result.Items.Sum(item => item.ProcessedFiles);
@@ -780,15 +1073,64 @@ namespace DdalggakBackup
             UpdateOpenButtons();
         }
 
+        private void ShowApplyResult(ApplyResult result, string itemName)
+        {
+            ItemResult backup = result.Backup == null ? null : result.Backup.Items.FirstOrDefault();
+            backup = CopyResultItem(backup, itemName);
+            if (backup.State == BackupState.Pending && result.Backup != null &&
+                (result.Backup.State == BackupState.Failed || result.Backup.State == BackupState.Cancelled || result.Backup.State == BackupState.Partial))
+                backup.State = result.Backup.State;
+            ItemResult application = CopyResultItem(result.Application, itemName);
+            if (String.IsNullOrEmpty(application.Destination)) application.Destination = result.TargetPath;
+            BackupResult display = new BackupResult
+            {
+                State = result.State, StartedAt = result.StartedAt, FinishedAt = result.FinishedAt,
+                Message = result.Message, LogPath = result.LogPath ?? (result.Backup == null ? null : result.Backup.LogPath)
+            };
+            display.Items.Add(backup);
+            display.Items.Add(application);
+            if (result.Backup != null && result.Backup.Details != null) display.Details.AddRange(result.Backup.Details);
+            _lastResult = display;
+            ShowResult(display);
+            _results.Rows[0].Cells[0].Value = itemName + " · 사전 백업";
+            _results.Rows[1].Cells[0].Value = itemName + " · 적용";
+            _results.Columns[0].Width = 205;
+            _results.Columns[6].HeaderText = "백업 보관 / 적용 대상 경로";
+            _state.Text = "적용 " + StateText(result.State);
+            _counts.Text = "사전 백업: " + StateText(backup.State) + "   ·   적용: " + StateText(application.State) +
+                "   ·   적용 성공 " + application.SucceededFiles.ToString("N0") + " / 실패 " + application.FailedFiles.ToString("N0");
+            _preview.Text = "① 사전 백업 [" + StateText(backup.State) + "]: " +
+                (String.IsNullOrEmpty(backup.Destination) ? "생성된 백업 없음" : backup.Destination) + Environment.NewLine +
+                "② 적용 대상 [" + StateText(application.State) + "]: " + (result.TargetPath ?? "확정되지 않음");
+            _openFolder.Text = "선택 경로 열기";
+            UpdateOpenButtons();
+        }
+
+        private static ItemResult CopyResultItem(ItemResult item, string name)
+        {
+            if (item == null) return new ItemResult { Item = name, State = BackupState.Pending };
+            return new ItemResult
+            {
+                Item = item.Item, State = item.State, Destination = item.Destination,
+                TotalFiles = item.TotalFiles, ProcessedFiles = item.ProcessedFiles,
+                SucceededFiles = item.SucceededFiles, FailedFiles = item.FailedFiles,
+                ExcludedEntries = item.ExcludedEntries, Warnings = item.Warnings,
+                Details = item.Details == null ? new List<DetailEntry>() : new List<DetailEntry>(item.Details)
+            };
+        }
+
         private void SetBusy(bool busy)
         {
             _busy = busy;
             _pathGroup.Enabled = !busy;
             _itemGroup.Enabled = !busy;
             _nameGroup.Enabled = !busy;
+            _mode.Enabled = !busy;
+            _dropGroup.Enabled = !busy;
             _cancel.Enabled = busy;
-            _start.Text = busy ? "백업 진행 중…" : "선택 항목 백업";
-            _start.Enabled = !busy && _validName != null && SelectedItems().Length > 0;
+            _start.Text = busy ? (_runningApply ? "백업 후 적용 중…" : "백업 진행 중…") :
+                (ApplyMode ? "선택 항목 적용" : "선택 항목 백업");
+            _start.Enabled = CanStart();
             _cancel.Text = "취소";
             if (busy)
             {
@@ -814,7 +1156,7 @@ namespace DdalggakBackup
                 e.Cancel = true;
                 _closeRequested = true;
                 RequestCancel();
-                _currentFile.Text = "백업을 중단한 뒤 창을 닫습니다. 파일과 로그 정리가 끝날 때까지 기다려 주세요.";
+                _currentFile.Text = "진행 중인 작업을 중단한 뒤 창을 닫습니다. 파일과 로그 정리가 끝날 때까지 기다려 주세요.";
                 return;
             }
             SaveSettings(true);
@@ -881,6 +1223,7 @@ namespace DdalggakBackup
                 if (_checks[i].Text != Catalog.Items[i]) throw new InvalidOperationException("Catalog labels differ.");
             if (_profile.Items.Count != 2 || _profile.SelectedIndex != 0 || _profile.SelectedItem == null ||
                 ((MachineProfile)_profile.SelectedItem).Name != _settings.Profiles[0].Name ||
+                _profile.Text != _settings.Profiles[0].Name || _mode.Text != "백업" ||
                 _busy || _lastResult != null || _results.Rows.Count != 0 || _start.Enabled || _cancel.Enabled)
                 throw new InvalidOperationException("Unexpected initial state or automatic backup.");
             if (!String.Equals(_source.Text, Path.Combine(fixtureRoot, "source"), StringComparison.OrdinalIgnoreCase) ||
@@ -982,6 +1325,7 @@ namespace DdalggakBackup
                 result.Items.Any(item => Path.GetFileName(Path.GetDirectoryName(item.Destination)) != item.Item))
                 throw new InvalidOperationException("Custom item folders were not used in actual backup results.");
             CaptureSmoke(Path.Combine(fixtureRoot, "ui-result.png"));
+            await VerifyApplySmokeAsync(fixtureRoot);
             Size = new Size(1000, 700);
             await Task.Delay(80);
             Rectangle client = RectangleToScreen(ClientRectangle);
@@ -997,8 +1341,112 @@ namespace DdalggakBackup
                 "responsive asynchronous preview for 5_TERRACE and 6_SSIDE; no preview writes; isolated explicit custom-item backup; " +
                 "blank/whitespace uses 과검제어전 in preview and backup destinations; invalid name stays blocked; " +
                 "actual item result paths; fixture-only logs; frozen busy inputs; cancel enabled while busy; " +
+                "apply-mode single selection and backup-mode multi-selection; FileDrop input and rejected text drops; " +
+                "apply readiness and frozen input controls; original contents backed up before folder-contents and file application; " +
+                "unrelated files and unselected target unchanged; separate backup/application result rows; " +
                 "pinned action buttons at 1000x700; no production settings writes." + Environment.NewLine,
                 new System.Text.UTF8Encoding(false));
+        }
+
+        private async Task VerifyApplySmokeAsync(string fixtureRoot)
+        {
+            if (_persistSettings) throw new InvalidOperationException("Apply smoke cannot use production settings.");
+            string root = PathSafety.Canonicalize(Path.GetFullPath(fixtureRoot));
+            if (root.StartsWith(@"\\", StringComparison.Ordinal) || !Directory.Exists(root))
+                throw new InvalidOperationException("Apply smoke requires a local fixture.");
+            // Create a fresh subtree: the overwrite smoke never changes supplied fixture files.
+            string sandbox = Path.Combine(root, "apply-smoke-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            string source = Path.Combine(sandbox, "source");
+            string backup = Path.Combine(sandbox, "backup");
+            string input = Path.Combine(sandbox, "Config");
+            Directory.CreateDirectory(source);
+            Directory.CreateDirectory(backup);
+            Directory.CreateDirectory(Path.Combine(input, "nested"));
+            foreach (string item in _activeItems) Directory.CreateDirectory(Path.Combine(source, item));
+            string target = Path.Combine(source, _activeItems[4]);
+            string other = Path.Combine(source, _activeItems[5]);
+            File.WriteAllText(Path.Combine(target, "replace.txt"), "before apply");
+            File.WriteAllText(Path.Combine(target, "keep.txt"), "unrelated existing file");
+            File.WriteAllText(Path.Combine(other, "replace.txt"), "unselected target");
+            File.WriteAllText(Path.Combine(input, "replace.txt"), "after apply");
+            File.WriteAllText(Path.Combine(input, "nested", "settings.ini"), "nested payload");
+            string singleFile = Path.Combine(sandbox, "extra.txt");
+            File.WriteAllText(singleFile, "single file payload");
+            foreach (MachineProfile profile in _settings.Profiles)
+            {
+                profile.SourceRoot = source;
+                profile.BackupRoot = backup;
+            }
+            ApplyProfiles(_settings.Profiles, 0);
+            await RefreshSourceStatesAsync();
+            DataObject payload = new DataObject(DataFormats.FileDrop, new[] { input, singleFile });
+            DragEventArgs drag = new DragEventArgs(payload, 0, 0, 0, DragDropEffects.Copy, DragDropEffects.None);
+            DropInputsEnter(_dropList, drag);
+            if (drag.Effect != DragDropEffects.None) throw new InvalidOperationException("Backup mode accepted a file drop.");
+            _mode.SelectedIndex = 1;
+            if (_checks.Any(check => check.Checked) || _selectAll.Visible || !_dropGroup.Visible || _start.Enabled)
+                throw new InvalidOperationException("Apply mode did not clear selection and require inputs.");
+            _checks[4].Checked = true;
+            _checks[5].Checked = true;
+            if (SelectedItems().Length != 1 || !_checks[5].Checked || _checks[4].Checked)
+                throw new InvalidOperationException("Apply mode allowed more than one target.");
+            _mode.SelectedIndex = 0;
+            if (_checks.Any(check => check.Checked)) throw new InvalidOperationException("Mode change retained target selection.");
+            _checks[4].Checked = true;
+            _checks[5].Checked = true;
+            if (SelectedItems().Length != 2) throw new InvalidOperationException("Backup multi-selection regressed.");
+            _mode.SelectedIndex = 1;
+            _checks[4].Checked = true;
+            if (_start.Enabled) throw new InvalidOperationException("Empty apply inputs enabled execution.");
+            DragEventArgs textDrop = new DragEventArgs(new DataObject(DataFormats.Text, "not a file"), 0, 0, 0, DragDropEffects.Copy, DragDropEffects.None);
+            DropInputsEnter(_dropList, textDrop);
+            DropInputs(_dropList, textDrop);
+            if (textDrop.Effect != DragDropEffects.None || _dropList.Items.Count != 0)
+                throw new InvalidOperationException("Non-file drop was accepted.");
+            DropInputsEnter(_dropList, drag);
+            DropInputs(_dropList, drag);
+            if (drag.Effect != DragDropEffects.Copy || _dropList.Items.Count != 2 || !_start.Enabled)
+                throw new InvalidOperationException("FileDrop did not populate apply inputs.");
+            _name.Text = "bad/name";
+            if (_start.Enabled) throw new InvalidOperationException("Invalid prior-backup name enabled apply.");
+            _name.Clear();
+            _previewTimer.Stop();
+            await RefreshPreviewAsync();
+            if (!_start.Enabled || !_preview.Text.Contains(target) || !_preview.Text.Contains("① 사전 백업"))
+                throw new InvalidOperationException("Apply preview/readiness did not show target and prior backup.");
+            if (_mode.Text != "백업 후 적용 (항목 1개)" || _profile.Text != _settings.Profiles[0].Name ||
+                _modeLabel.Text != "작업 방식 · 백업 후 적용")
+                throw new InvalidOperationException("Apply mode or profile display text is incorrect.");
+            CaptureSmoke(Path.Combine(root, "ui-apply-ready.png"));
+            SetBusy(true);
+            DropInputsEnter(_dropList, drag);
+            if (_mode.Enabled || _dropGroup.Enabled || _pathGroup.Enabled || _itemGroup.Enabled || _nameGroup.Enabled ||
+                _start.Enabled || !_cancel.Enabled || drag.Effect != DragDropEffects.None)
+                throw new InvalidOperationException("Busy apply inputs remained editable.");
+            SetBusy(false);
+            ApplyRequest request = new ApplyRequest
+            {
+                SourceRoot = source, BackupRoot = backup, Name = _name.Text, Item = SelectedItems()[0],
+                ConfiguredItems = (string[])_activeItems.Clone(), InputPaths = _dropList.Items.Cast<string>().ToArray(),
+                StartedAt = DateTime.Now, LogDirectory = Path.Combine(sandbox, "logs")
+            };
+            await ExecuteApplyAsync(request);
+            ApplyResult result = _lastApplyResult;
+            if (result == null || result.State != BackupState.Complete || result.Backup == null ||
+                result.Backup.State != BackupState.Complete || result.Application == null || result.Application.State != BackupState.Complete)
+                throw new InvalidOperationException("Fixture apply failed: " + (result == null ? "no result" : result.Message));
+            string saved = result.Backup.Items.Single().Destination;
+            if (File.ReadAllText(Path.Combine(saved, "replace.txt")) != "before apply" ||
+                File.ReadAllText(Path.Combine(target, "replace.txt")) != "after apply" ||
+                File.ReadAllText(Path.Combine(target, "keep.txt")) != "unrelated existing file" ||
+                File.ReadAllText(Path.Combine(target, "extra.txt")) != "single file payload" ||
+                File.ReadAllText(Path.Combine(target, "nested", "settings.ini")) != "nested payload" ||
+                File.ReadAllText(Path.Combine(other, "replace.txt")) != "unselected target" || Directory.Exists(Path.Combine(target, "Config")))
+                throw new InvalidOperationException("Prior backup, flattened folder content, or preservation checks failed.");
+            if (_results.Rows.Count != 2 || !_results.Rows[0].Cells[0].Value.ToString().Contains("사전 백업") ||
+                !_results.Rows[1].Cells[0].Value.ToString().Contains("적용") || _busy || !_start.Enabled || _cancel.Enabled)
+                throw new InvalidOperationException("Apply completion UI does not separate backup and application results.");
+            CaptureSmoke(Path.Combine(root, "ui-apply-result.png"));
         }
 
         private void CaptureSmoke(string path)
